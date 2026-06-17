@@ -8,12 +8,14 @@ import de.stuebingerb.kgraphql.schema.execution.ErrorHandler
 import de.stuebingerb.kgraphql.schema.execution.GenericTypeResolver
 import de.stuebingerb.kgraphql.stitched.schema.execution.RemoteRequestExecutor
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.serialization.json.Json
 
 @ExperimentalAPI
 class StitchedSchemaConfiguration(
     // document parser caching mechanisms
     useCachingDocumentParser: Boolean,
     documentParserCacheMaximumSize: Long,
+    json: Json = Json,
     // jackson features
     objectMapper: ObjectMapper,
     useDefaultPrettyPrinter: Boolean,
@@ -30,6 +32,7 @@ class StitchedSchemaConfiguration(
 ) : SchemaConfiguration(
     useCachingDocumentParser,
     documentParserCacheMaximumSize,
+    json,
     objectMapper,
     useDefaultPrettyPrinter,
     coroutineDispatcher,

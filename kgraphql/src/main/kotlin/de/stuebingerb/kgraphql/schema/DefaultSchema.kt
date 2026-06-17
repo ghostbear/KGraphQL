@@ -63,7 +63,7 @@ class DefaultSchema(
                 context = context
             )
         } catch (e: RequestError) {
-            e.serialize()
+            configuration.json.encodeToString(e)
         }
     }
 

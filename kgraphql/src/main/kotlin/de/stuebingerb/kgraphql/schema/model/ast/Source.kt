@@ -1,5 +1,6 @@
 package de.stuebingerb.kgraphql.schema.model.ast
 
+import kotlinx.serialization.Serializable
 import kotlin.math.floor
 
 /**
@@ -75,5 +76,7 @@ data class Source(
     private fun whitespace(len: Int): String = (1..len).joinToString("") { " " }
 
     private fun lpad(len: Int, str: String) = whitespace(len - str.length) + str
+
+    @Serializable
     data class LocationSource(val line: Int, val column: Int)
 }

@@ -8,7 +8,6 @@ import de.stuebingerb.kgraphql.Context
 import de.stuebingerb.kgraphql.ExecutionError
 import de.stuebingerb.kgraphql.ExecutionException
 import de.stuebingerb.kgraphql.RequestError
-import de.stuebingerb.kgraphql.helpers.toJsonNode
 import de.stuebingerb.kgraphql.mapIndexedParallel
 import de.stuebingerb.kgraphql.request.Variables
 import de.stuebingerb.kgraphql.request.VariablesJson
@@ -25,6 +24,8 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.job
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.encodeToJsonElement
 import nidomiro.kdataloader.DataLoader
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.reflect.KProperty1
@@ -75,62 +76,64 @@ class ParallelRequestExecutor(val schema: DefaultSchema) : RequestExecutor {
     }
 
     override suspend fun suspendExecute(plan: ExecutionPlan, variables: VariablesJson, context: Context): String {
-        val root = jsonNodeFactory.objectNode()
-        val loaders = plan.constructLoaders()
+        val json = schema.configuration.json
+        val root = buildJsonObject {
+            val loaders = plan.constructLoaders()
 
-        suspend fun executeOperation(operation: Execution.Node): Pair<Execution.Node, Deferred<JsonNode>?> =
-            coroutineScope {
-                val ctx = ExecutionContext(Variables(variables, operation.variables), context, loaders)
-                if (shouldInclude(ctx, operation)) {
-                    try {
-                        operation to writeOperation(
-                            isSubscription = plan.isSubscription,
-                            ctx = ctx,
-                            node = operation,
-                            operation = operation.field as Field.Function<*, *>
-                        )
-                    } catch (e: ExecutionError) {
-                        context.raiseError(e)
-                        if (operation.field.returnType.isNullable()) {
-                            operation to CompletableDeferred(jsonNodeFactory.nullNode())
-                        } else {
-                            operation to null
+            suspend fun executeOperation(operation: Execution.Node): Pair<Execution.Node, Deferred<JsonNode>?> =
+                coroutineScope {
+                    val ctx = ExecutionContext(Variables(variables, operation.variables), context, loaders)
+                    if (shouldInclude(ctx, operation)) {
+                        try {
+                            operation to writeOperation(
+                                isSubscription = plan.isSubscription,
+                                ctx = ctx,
+                                node = operation,
+                                operation = operation.field as Field.Function<*, *>
+                            )
+                        } catch (e: ExecutionError) {
+                            context.raiseError(e)
+                            if (operation.field.returnType.isNullable()) {
+                                operation to CompletableDeferred(jsonNodeFactory.nullNode())
+                            } else {
+                                operation to null
+                            }
                         }
+                    } else {
+                        operation to null
                     }
-                } else {
-                    operation to null
+                }
+
+            // TODO: we might want a SerialRequestExecutor or at least rename *Parallel*RequestExecutor
+            val resultMap = if (plan.executionMode == ExecutionMode.Normal) {
+                plan.mapIndexedParallel(dispatcher) { _, operation -> executeOperation(operation) }.toMap()
+            } else {
+                plan.associate { operation -> executeOperation(operation) }
+            }
+
+            val data = if (resultMap.values.any { it != null }) {
+                jsonNodeFactory.objectNode()
+            } else {
+                jsonNodeFactory.nullNode()
+            }
+
+            for (operation in plan) {
+                // Remove all by skip/include directives
+                if (resultMap[operation] != null) {
+                    (data as ObjectNode).merge(operation.aliasOrKey, resultMap[operation]!!.await())
                 }
             }
 
-        // TODO: we might want a SerialRequestExecutor or at least rename *Parallel*RequestExecutor
-        val resultMap = if (plan.executionMode == ExecutionMode.Normal) {
-            plan.mapIndexedParallel(dispatcher) { _, operation -> executeOperation(operation) }.toMap()
-        } else {
-            plan.associate { operation -> executeOperation(operation) }
-        }
-
-        val data = if (resultMap.values.any { it != null }) {
-            jsonNodeFactory.objectNode()
-        } else {
-            jsonNodeFactory.nullNode()
-        }
-
-        for (operation in plan) {
-            // Remove all by skip/include directives
-            if (resultMap[operation] != null) {
-                (data as ObjectNode).merge(operation.aliasOrKey, resultMap[operation]!!.await())
+            // https://spec.graphql.org/September2025/#note-19ca4
+            // "When "errors" is present in an execution result, it may be helpful for it to appear first when serialized to make it more apparent that errors are present."
+            // So let's put errors first
+            if (context.errors.isNotEmpty()) {
+                put("errors", json.encodeToJsonElement(context.errors))
             }
+            put("data", json.encodeToJsonElement<JsonNode>(data))
         }
 
-        // https://spec.graphql.org/September2025/#note-19ca4
-        // "When "errors" is present in an execution result, it may be helpful for it to appear first when serialized to make it more apparent that errors are present."
-        // So let's put errors first
-        if (context.errors.isNotEmpty()) {
-            root.set<ArrayNode>("errors", context.errors.toJsonNode(schema.configuration.objectMapper))
-        }
-        root.set<ObjectNode>("data", data)
-
-        return objectWriter.writeValueAsString(root)
+        return schema.configuration.json.encodeToString(root)
     }
 
     private suspend fun <T> writeOperation(

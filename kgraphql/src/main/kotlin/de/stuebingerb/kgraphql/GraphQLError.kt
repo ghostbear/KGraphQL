@@ -1,14 +1,24 @@
 package de.stuebingerb.kgraphql
 
+import com.fasterxml.jackson.databind.JsonNode
 import de.stuebingerb.kgraphql.helpers.toJsonElement
 import de.stuebingerb.kgraphql.schema.execution.Execution
 import de.stuebingerb.kgraphql.schema.model.ast.ASTNode
 import de.stuebingerb.kgraphql.schema.model.ast.Location.Companion.getLocation
 import de.stuebingerb.kgraphql.schema.model.ast.Source
+import kotlinx.serialization.Contextual
+import kotlinx.serialization.KSerializer
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.descriptors.buildClassSerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
+import kotlinx.serialization.json.JsonEncoder
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.put
 
 enum class BuiltInErrorCodes {
@@ -18,6 +28,7 @@ enum class BuiltInErrorCodes {
 /**
  * The base class for all GraphQL errors, will either be a [RequestError] or an [ExecutionError].
  */
+@Serializable(with = GraphQLError.Serializer::class)
 sealed class GraphQLError(
     /**
      * A message describing the error intended for the developer as a guide to understand
@@ -52,7 +63,7 @@ sealed class GraphQLError(
     /**
      * Custom error extensions.
      */
-    open val extensions: Map<String, Any?>?
+    open val extensions: Map<String, @Contextual Any?>?
 ) : Exception(message, originalError) {
 
     /**
@@ -87,38 +98,8 @@ sealed class GraphQLError(
         return output
     }
 
-    open fun serialize(): String = buildJsonObject {
-        put("errors", buildJsonArray {
-            addJsonObject {
-                put("message", message)
-                locations?.let {
-                    put("locations", buildJsonArray {
-                        it.forEach { location ->
-                            addJsonObject {
-                                put("line", location.line)
-                                put("column", location.column)
-                            }
-                        }
-                    })
-                }
-                path?.let { segments ->
-                    put("path", buildJsonArray {
-                        segments.forEach {
-                            val value = when (it) {
-                                is String -> JsonPrimitive(it)
-                                is Number -> JsonPrimitive(it)
-                                else -> JsonPrimitive(it.toString())
-                            }
-                            add(value)
-                        }
-                    })
-                }
-                extensions?.let {
-                    put("extensions", it.toJsonElement())
-                }
-            }
-        })
-    }.toString()
+    companion object Serializer : KSerializer<GraphQLError> by GraphQLErrorSerializer(GraphQLError::class.java)
+
 }
 
 /**
@@ -133,11 +114,12 @@ sealed class GraphQLError(
  *
  * cf. https://spec.graphql.org/September2025/#execution-error
  */
+@Serializable(with = ExecutionError.Serializer::class)
 open class ExecutionError(
     message: String,
     node: Execution,
     originalError: Throwable? = null,
-    extensions: Map<String, Any?>? = mapOf("type" to BuiltInErrorCodes.INTERNAL_SERVER_ERROR.name)
+    extensions: Map<String, @Contextual Any?>? = mapOf("type" to BuiltInErrorCodes.INTERNAL_SERVER_ERROR.name)
 ) : GraphQLError(
     message = message,
     node = node.selectionNode,
@@ -148,7 +130,9 @@ open class ExecutionError(
 ) {
     // https://spec.graphql.org/September2025/#sel-GAPHPHLCAAEDAAR2mH:
     // "An execution error must occur at a specific response position", so [path] is always present
-    override val path: List<Any> = node.fullPath
+    override val path: List<@Contextual Any> = node.fullPath
+
+    companion object Serializer : KSerializer<ExecutionError> by GraphQLErrorSerializer(ExecutionError::class.java)
 }
 
 /**
@@ -162,6 +146,7 @@ open class ExecutionError(
  *
  * cf. https://spec.graphql.org/September2025/#request-error
  */
+@Serializable(with = RequestError.Serializer::class)
 open class RequestError(
     message: String,
     source: Source? = null,
@@ -179,32 +164,90 @@ open class RequestError(
 ) {
     // Request errors are raised before execution, so they cannot provide a proper path
     override val path = null
+
+    companion object Serializer : KSerializer<RequestError> by GraphQLErrorSerializer(RequestError::class.java)
 }
 
+@Serializable(with = ExecutionException.Serializer::class)
 class ExecutionException(message: String, node: Execution, cause: Throwable? = null) : ExecutionError(
     message = message,
     node = node,
     originalError = cause,
     extensions = mapOf("type" to BuiltInErrorCodes.INTERNAL_SERVER_ERROR.name)
-)
+) {
+    companion object Serializer : KSerializer<ExecutionException> by GraphQLErrorSerializer(ExecutionException::class.java)
+}
 
+@Serializable(with = InvalidInputValueException.Serializer::class)
 class InvalidInputValueException(message: String, node: Execution, originalError: Throwable? = null) : ExecutionError(
     message = message,
     node = node,
     originalError = originalError,
     extensions = mapOf("type" to BuiltInErrorCodes.BAD_USER_INPUT.name)
-)
+) {
+    companion object Serializer : KSerializer<InvalidInputValueException> by GraphQLErrorSerializer(InvalidInputValueException::class.java)
+}
 
+@Serializable(with = InvalidSyntaxException.Serializer::class)
 class InvalidSyntaxException(message: String, source: Source, positions: List<Int>) : RequestError(
     message = message,
     source = source,
     positions = positions,
     extensions = mapOf("type" to BuiltInErrorCodes.GRAPHQL_PARSE_FAILED.name)
-)
+) {
+    companion object Serializer : KSerializer<InvalidSyntaxException> by GraphQLErrorSerializer(InvalidSyntaxException::class.java)
+}
 
+@Serializable(with = ValidationException.Serializer::class)
 class ValidationException(message: String, node: ASTNode? = null, originalError: Throwable? = null) : RequestError(
     message = message,
     node = node,
     originalError = originalError,
     extensions = mapOf("type" to BuiltInErrorCodes.GRAPHQL_VALIDATION_FAILED.name)
-)
+) {
+    companion object Serializer : KSerializer<ValidationException> by GraphQLErrorSerializer(ValidationException::class.java)
+}
+
+class GraphQLErrorSerializer<T : GraphQLError>(clazz: Class<out GraphQLError>) : KSerializer<T> {
+
+    override val descriptor: SerialDescriptor = buildClassSerialDescriptor(clazz.simpleName)
+
+    override fun serialize(encoder: Encoder, value: T) {
+        require(encoder is JsonEncoder) { "This serializer can only be used with Json format" }
+
+        val jsonObject = buildJsonObject {
+            put("message", value.message)
+            value.locations?.let {
+                put("locations", buildJsonArray {
+                    it.forEach { location ->
+                        addJsonObject {
+                            put("line", location.line)
+                            put("column", location.column)
+                        }
+                    }
+                })
+            }
+            value.path.let { segments ->
+                put("path", buildJsonArray {
+                    segments?.forEach {
+                        val value = when (it) {
+                            is String -> JsonPrimitive(it)
+                            is Number -> JsonPrimitive(it)
+                            else -> JsonPrimitive(it.toString())
+                        }
+                        add(value)
+                    }
+                })
+            }
+            value.extensions?.let {
+                put("extensions", it.toJsonElement())
+            }
+        }
+
+        encoder.encodeJsonElement(jsonObject)
+    }
+
+    override fun deserialize(decoder: Decoder): T {
+        throw IllegalStateException("Deserialization is not supported")
+    }
+}

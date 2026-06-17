@@ -118,7 +118,7 @@ class GraphQL(val schema: Schema) {
                     }
                 } catch (e: GraphQLError) {
                     context.respondText(
-                        e.serialize(),
+                        schema.configuration.json.encodeToString(e),
                         ContentType.Application.Json,
                         HttpStatusCode.OK
                     )

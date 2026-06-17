@@ -6,10 +6,12 @@ import de.stuebingerb.kgraphql.schema.model.ast.NameNode
 import de.stuebingerb.kgraphql.schema.model.ast.SelectionNode
 import de.stuebingerb.kgraphql.schema.structure.Field
 import io.kotest.matchers.shouldBe
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.put
 import org.junit.jupiter.api.Test
 
@@ -59,9 +61,9 @@ class GraphQLErrorTest {
                     })
                 }
             })
-        }.toString()
+        }
 
-        graphqlError.serialize() shouldBe expectedJson
+        Json.encodeToJsonElement(graphqlError) shouldBe expectedJson
     }
 
     @Test
@@ -79,9 +81,9 @@ class GraphQLErrorTest {
                     })
                 }
             })
-        }.toString()
+        }
 
-        graphqlError.serialize() shouldBe expectedJson
+        Json.encodeToJsonElement(graphqlError) shouldBe expectedJson
     }
 
     @Test
@@ -123,8 +125,8 @@ class GraphQLErrorTest {
                     })
                 }
             })
-        }.toString()
+        }
 
-        graphqlError.serialize() shouldBe expectedJson
+        Json.encodeToJsonElement(graphqlError) shouldBe expectedJson
     }
 }

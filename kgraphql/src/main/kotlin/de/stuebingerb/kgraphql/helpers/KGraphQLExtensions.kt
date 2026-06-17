@@ -1,7 +1,6 @@
 package de.stuebingerb.kgraphql.helpers
 
 import com.fasterxml.jackson.databind.JsonNode
-import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.node.ArrayNode
 import com.fasterxml.jackson.databind.node.BooleanNode
 import com.fasterxml.jackson.databind.node.DoubleNode
@@ -11,7 +10,6 @@ import com.fasterxml.jackson.databind.node.LongNode
 import com.fasterxml.jackson.databind.node.NullNode
 import com.fasterxml.jackson.databind.node.ObjectNode
 import com.fasterxml.jackson.databind.node.TextNode
-import de.stuebingerb.kgraphql.ExecutionError
 import de.stuebingerb.kgraphql.ValidationException
 import de.stuebingerb.kgraphql.schema.execution.Execution
 import de.stuebingerb.kgraphql.schema.introspection.TypeKind
@@ -130,21 +128,3 @@ fun JsonNode?.toValueNode(expectedType: __Type): ValueNode = when (this) {
 }
 
 internal fun Double.isWholeNumber() = this % 1.0 == 0.0
-
-internal fun List<ExecutionError>.toJsonNode(objectMapper: ObjectMapper): ArrayNode =
-    objectMapper.createArrayNode().apply {
-        addAll(
-            this@toJsonNode.map { error ->
-                objectMapper.createObjectNode().apply {
-                    put("message", error.message)
-                    error.locations?.let {
-                        set<JsonNode>("locations", objectMapper.valueToTree(it))
-                    }
-                    set<JsonNode>("path", objectMapper.valueToTree(error.path))
-                    error.extensions?.let {
-                        set<JsonNode>("extensions", objectMapper.valueToTree(it))
-                    }
-                }
-            }
-        )
-    }
