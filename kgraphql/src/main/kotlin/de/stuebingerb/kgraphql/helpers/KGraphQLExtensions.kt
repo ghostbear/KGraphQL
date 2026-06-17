@@ -1,17 +1,5 @@
 package de.stuebingerb.kgraphql.helpers
 
-import com.fasterxml.jackson.databind.JsonNode
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.databind.node.ArrayNode
-import com.fasterxml.jackson.databind.node.BooleanNode
-import com.fasterxml.jackson.databind.node.DoubleNode
-import com.fasterxml.jackson.databind.node.FloatNode
-import com.fasterxml.jackson.databind.node.IntNode
-import com.fasterxml.jackson.databind.node.LongNode
-import com.fasterxml.jackson.databind.node.NullNode
-import com.fasterxml.jackson.databind.node.ObjectNode
-import com.fasterxml.jackson.databind.node.TextNode
-import de.stuebingerb.kgraphql.ExecutionError
 import de.stuebingerb.kgraphql.ValidationException
 import de.stuebingerb.kgraphql.schema.execution.Execution
 import de.stuebingerb.kgraphql.schema.introspection.TypeKind
@@ -20,8 +8,15 @@ import de.stuebingerb.kgraphql.schema.model.ast.NameNode
 import de.stuebingerb.kgraphql.schema.model.ast.ValueNode
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.floatOrNull
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.longOrNull
+import java.awt.SystemColor.text
 
 /**
  * This returns a list of all scalar fields requested on this type.
@@ -90,61 +85,51 @@ fun Map<*, *>.toJsonElement(): JsonElement {
  * serializations (ex. JSON) do not discriminate between integer and floating-point values, they are interpreted as an
  * integer input value if they have an empty fractional part (ex. 1.0) and otherwise as floating-point input value."
  */
-fun JsonNode?.toValueNode(expectedType: __Type): ValueNode = when (this) {
-    is BooleanNode -> ValueNode.BooleanValueNode(booleanValue(), null)
-    is IntNode, is LongNode -> ValueNode.NumberValueNode(longValue(), null)
-    is DoubleNode, is FloatNode -> if (doubleValue().isWholeNumber()) {
-        ValueNode.NumberValueNode(longValue(), null)
-    } else {
-        ValueNode.DoubleValueNode(doubleValue(), null)
-    }
-
-    is TextNode -> if (expectedType.unwrapped().kind == TypeKind.ENUM) {
-        ValueNode.EnumValueNode(textValue(), null)
-    } else {
-        // TODO: what about multiline strings?
-        ValueNode.StringValueNode(textValue(), false, null)
-    }
-
-    is ArrayNode -> ValueNode.ListValueNode(map { it.toValueNode(expectedType) }, null)
-    is ObjectNode -> ValueNode.ObjectValueNode(
-        properties().filterNot { it.key.startsWith("__") }.map { prop ->
-            val inputFields = checkNotNull(expectedType.unwrapped().inputFields) {
-                "Expected INPUT_OBJECT for ${expectedType.unwrapped().name} but got ${expectedType.kind}"
-            }
-            val expectedPropType = inputFields.firstOrNull { it.name == prop.key }?.type
-                ?: throw ValidationException(
-                    "Property '${prop.key}' on '${expectedType.unwrapped().name}' does not exist"
+fun JsonElement?.toValueNode(expectedType: __Type): ValueNode {
+    when (this) {
+        is JsonNull, null -> return ValueNode.NullValueNode(null)
+        is JsonArray -> return ValueNode.ListValueNode(this.map { it.toValueNode(expectedType) }, null)
+        is JsonObject -> return ValueNode.ObjectValueNode(
+            this.filterNot { it.key.startsWith("__") }.map { prop ->
+                val inputFields = checkNotNull(expectedType.unwrapped().inputFields) {
+                    "Expected INPUT_OBJECT for ${expectedType.unwrapped().name} but got ${expectedType.kind}"
+                }
+                val expectedPropType = inputFields.firstOrNull { it.name == prop.key }?.type
+                    ?: throw ValidationException(
+                        "Property '${prop.key}' on '${expectedType.unwrapped().name}' does not exist"
+                    )
+                ValueNode.ObjectValueNode.ObjectFieldNode(
+                    null,
+                    NameNode(prop.key, null),
+                    prop.value.toValueNode(expectedPropType)
                 )
-            ValueNode.ObjectValueNode.ObjectFieldNode(
-                null,
-                NameNode(prop.key, null),
-                prop.value.toValueNode(expectedPropType)
-            )
-        },
-        null
-    )
+            },
+            null
+        )
 
-    is NullNode, null -> ValueNode.NullValueNode(null)
-    else -> error("Unexpected value: $this")
+        is JsonPrimitive -> {
+            val booleanOrNull = booleanOrNull
+            if (booleanOrNull != null) {
+                return ValueNode.BooleanValueNode(booleanOrNull, null)
+            }
+            val longOrNull = longOrNull ?: intOrNull?.toLong()
+            if (longOrNull != null) {
+                return ValueNode.NumberValueNode(longOrNull, null)
+            }
+            val doubleOrNull = doubleOrNull ?: floatOrNull?.toDouble()
+            if (doubleOrNull != null) {
+                if (doubleOrNull.isWholeNumber()) {
+                    return ValueNode.NumberValueNode(doubleOrNull.toLong(), null)
+                }
+                return ValueNode.DoubleValueNode(doubleOrNull, null)
+            }
+            val text = content
+            if (expectedType.unwrapped().kind == TypeKind.ENUM) {
+                return ValueNode.EnumValueNode(text, null)
+            }
+            return ValueNode.StringValueNode(text, false, null)
+        }
+    }
 }
 
 internal fun Double.isWholeNumber() = this % 1.0 == 0.0
-
-internal fun List<ExecutionError>.toJsonNode(objectMapper: ObjectMapper): ArrayNode =
-    objectMapper.createArrayNode().apply {
-        addAll(
-            this@toJsonNode.map { error ->
-                objectMapper.createObjectNode().apply {
-                    put("message", error.message)
-                    error.locations?.let {
-                        set<JsonNode>("locations", objectMapper.valueToTree(it))
-                    }
-                    set<JsonNode>("path", objectMapper.valueToTree(error.path))
-                    error.extensions?.let {
-                        set<JsonNode>("extensions", objectMapper.valueToTree(it))
-                    }
-                }
-            }
-        )
-    }

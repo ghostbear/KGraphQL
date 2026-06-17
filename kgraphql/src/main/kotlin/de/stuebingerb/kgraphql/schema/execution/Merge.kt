@@ -1,44 +1,45 @@
 package de.stuebingerb.kgraphql.schema.execution
 
-import com.fasterxml.jackson.databind.JsonNode
-import com.fasterxml.jackson.databind.node.ObjectNode
 import kotlinx.coroutines.Deferred
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 
-internal suspend fun MutableMap<String, Deferred<JsonNode?>>.merge(
+internal suspend fun MutableMap<String, Deferred<JsonElement?>>.merge(
     key: String,
-    node: Deferred<JsonNode?>
-): MutableMap<String, Deferred<JsonNode?>> {
+    node: Deferred<JsonElement?>
+): MutableMap<String, Deferred<JsonElement?>> {
     merge(key, node, this::get, this::set)
     return this
 }
 
-internal fun ObjectNode.merge(other: ObjectNode) {
-    other.properties().forEach {
-        merge(it.key, it.value)
-    }
+// todo use return json object
+internal fun JsonObject.merge(other: JsonObject): JsonObject {
+    return JsonObject(this + other)
 }
-
-internal fun ObjectNode.merge(key: String, node: JsonNode?) {
-    merge(key, node, this::get, this::set)
+// todo use return json object
+internal fun JsonObject.merge(key: String, node: JsonElement?): JsonObject {
+    return this.merge(JsonObject(mapOf(key to (node ?: JsonNull))))
 }
 
 internal suspend fun merge(
     key: String,
-    node: Deferred<JsonNode?>,
-    get: (String) -> Deferred<JsonNode?>?,
-    set: (String, Deferred<JsonNode?>) -> Any?
+    node: Deferred<JsonElement?>,
+    get: (String) -> Deferred<JsonElement?>?,
+    set: (String, Deferred<JsonElement?>) -> Any?
 ) {
     val existingNode = get(key)?.await()
     if (existingNode != null) {
         val node = node.await()
         when {
             node == null -> error("trying to merge null with non-null for $key")
-            node is ObjectNode -> {
-                check(existingNode is ObjectNode) { "trying to merge object with simple node for $key" }
+            node is JsonObject -> {
+                check(existingNode is JsonObject) { "trying to merge object with simple node for $key" }
                 existingNode.merge(node)
             }
 
-            existingNode is ObjectNode -> error("trying to merge simple node with object node for $key")
+            existingNode is JsonObject -> error("trying to merge simple node with object node for $key")
             node != existingNode -> error("trying to merge different simple nodes for $key")
         }
     } else {
@@ -46,17 +47,17 @@ internal suspend fun merge(
     }
 }
 
-internal fun merge(key: String, node: JsonNode?, get: (String) -> JsonNode?, set: (String, JsonNode?) -> Any?) {
+internal fun merge(key: String, node: JsonElement?, get: (String) -> JsonElement?, set: (String, JsonElement?) -> Any?) {
     val existingNode = get(key)
     if (existingNode != null) {
         when {
             node == null -> error("trying to merge null with non-null for $key")
-            node is ObjectNode -> {
-                check(existingNode is ObjectNode) { "trying to merge object with simple node for $key" }
+            node is JsonObject -> {
+                check(existingNode is JsonObject) { "trying to merge object with simple node for $key" }
                 existingNode.merge(node)
             }
 
-            existingNode is ObjectNode -> error("trying to merge simple node with object node for $key")
+            existingNode is JsonObject -> error("trying to merge simple node with object node for $key")
             node != existingNode -> error("trying to merge different simple nodes for $key")
         }
     } else {

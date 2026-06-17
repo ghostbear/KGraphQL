@@ -5,6 +5,7 @@ plugins {
     id("java-test-fixtures")
     alias(libs.plugins.kotlinx.benchmark)
     alias(libs.plugins.kotlinx.kover)
+    alias(libs.plugins.serialization)
 }
 
 lateinit var benchmarkImplementation: String
@@ -32,8 +33,6 @@ dependencies {
     implementation(kotlin("reflect"))
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.serialization.json)
-    implementation(libs.jackson.core.databind)
-    implementation(libs.jackson.module.kotlin)
     implementation(libs.aedile)
 
     testImplementation(libs.kotest)

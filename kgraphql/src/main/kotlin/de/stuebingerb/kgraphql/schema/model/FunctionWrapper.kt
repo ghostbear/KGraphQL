@@ -3,11 +3,11 @@
 
 package de.stuebingerb.kgraphql.schema.model
 
-import com.fasterxml.jackson.databind.ObjectWriter
 import de.stuebingerb.kgraphql.schema.Publisher
 import de.stuebingerb.kgraphql.schema.SchemaException
 import de.stuebingerb.kgraphql.schema.Subscriber
 import de.stuebingerb.kgraphql.schema.structure.validateName
+import kotlinx.serialization.json.Json
 import kotlin.reflect.KFunction
 import kotlin.reflect.KType
 import kotlin.reflect.full.callSuspend
@@ -66,7 +66,7 @@ interface FunctionWrapper<T> : Publisher {
     val kFunction: KFunction<T>
 
     suspend fun invoke(vararg args: Any?): T?
-    suspend fun invoke(args: List<Any?>, subscriptionArgs: List<String>, objectWriter: ObjectWriter): T?
+    suspend fun invoke(args: List<Any?>, subscriptionArgs: List<String>, json: Json): T?
 
     fun arity(): Int
 
@@ -116,7 +116,7 @@ interface FunctionWrapper<T> : Publisher {
             subscribers.remove(subscription)
         }
 
-        override suspend fun invoke(args: List<Any?>, subscriptionArgs: List<String>, objectWriter: ObjectWriter): T? {
+        override suspend fun invoke(args: List<Any?>, subscriptionArgs: List<String>, json: Json): T? {
             TODO("not needed")
         }
 
@@ -139,7 +139,7 @@ interface FunctionWrapper<T> : Publisher {
             subscribers.remove(subscription)
         }
 
-        override suspend fun invoke(args: List<Any?>, subscriptionArgs: List<String>, objectWriter: ObjectWriter): T? {
+        override suspend fun invoke(args: List<Any?>, subscriptionArgs: List<String>, json: Json): T? {
             TODO("not needed")
         }
 
@@ -176,12 +176,12 @@ interface FunctionWrapper<T> : Publisher {
             subscribers.remove(subscription)
         }
 
-        override suspend fun invoke(args: List<Any?>, subscriptionArgs: List<String>, objectWriter: ObjectWriter): T? {
+        override suspend fun invoke(args: List<Any?>, subscriptionArgs: List<String>, json: Json): T? {
             if (args.size == arity()) {
                 val t = implementation(args[0] as R)
                 val subscription = args[0] as String
                 subscribers[subscription]?.setArgs(subscriptionArgs.toTypedArray())
-                subscribers[subscription]?.setObjectWriter(objectWriter)
+                subscribers[subscription]?.setJson(json)
                 return t
             } else {
                 val e = IllegalArgumentException("This function needs exactly ${arity()} arguments")
@@ -227,7 +227,7 @@ interface FunctionWrapper<T> : Publisher {
             subscribers.remove(subscription)
         }
 
-        override suspend fun invoke(args: List<Any?>, subscriptionArgs: List<String>, objectWriter: ObjectWriter): T? {
+        override suspend fun invoke(args: List<Any?>, subscriptionArgs: List<String>, json: Json): T? {
             TODO("not needed")
         }
 
@@ -265,7 +265,7 @@ interface FunctionWrapper<T> : Publisher {
             subscribers.remove(subscription)
         }
 
-        override suspend fun invoke(args: List<Any?>, subscriptionArgs: List<String>, objectWriter: ObjectWriter): T? {
+        override suspend fun invoke(args: List<Any?>, subscriptionArgs: List<String>, json: Json): T? {
             TODO("not needed")
         }
 
@@ -303,7 +303,7 @@ interface FunctionWrapper<T> : Publisher {
             subscribers.remove(subscription)
         }
 
-        override suspend fun invoke(args: List<Any?>, subscriptionArgs: List<String>, objectWriter: ObjectWriter): T? {
+        override suspend fun invoke(args: List<Any?>, subscriptionArgs: List<String>, json: Json): T? {
             TODO("not needed")
         }
 
@@ -341,7 +341,7 @@ interface FunctionWrapper<T> : Publisher {
             subscribers.remove(subscription)
         }
 
-        override suspend fun invoke(args: List<Any?>, subscriptionArgs: List<String>, objectWriter: ObjectWriter): T? {
+        override suspend fun invoke(args: List<Any?>, subscriptionArgs: List<String>, json: Json): T? {
             TODO("not needed")
         }
 
@@ -379,7 +379,7 @@ interface FunctionWrapper<T> : Publisher {
             subscribers.remove(subscription)
         }
 
-        override suspend fun invoke(args: List<Any?>, subscriptionArgs: List<String>, objectWriter: ObjectWriter): T? {
+        override suspend fun invoke(args: List<Any?>, subscriptionArgs: List<String>, json: Json): T? {
             TODO("not needed")
         }
 
@@ -418,7 +418,7 @@ interface FunctionWrapper<T> : Publisher {
             subscribers.remove(subscription)
         }
 
-        override suspend fun invoke(args: List<Any?>, subscriptionArgs: List<String>, objectWriter: ObjectWriter): T? {
+        override suspend fun invoke(args: List<Any?>, subscriptionArgs: List<String>, json: Json): T? {
             TODO("not needed")
         }
 
@@ -464,7 +464,7 @@ interface FunctionWrapper<T> : Publisher {
             subscribers.remove(subscription)
         }
 
-        override suspend fun invoke(args: List<Any?>, subscriptionArgs: List<String>, objectWriter: ObjectWriter): T? {
+        override suspend fun invoke(args: List<Any?>, subscriptionArgs: List<String>, json: Json): T? {
             TODO("not needed")
         }
 
@@ -511,7 +511,7 @@ interface FunctionWrapper<T> : Publisher {
             subscribers.remove(subscription)
         }
 
-        override suspend fun invoke(args: List<Any?>, subscriptionArgs: List<String>, objectWriter: ObjectWriter): T? {
+        override suspend fun invoke(args: List<Any?>, subscriptionArgs: List<String>, json: Json): T? {
             TODO("not needed")
         }
 

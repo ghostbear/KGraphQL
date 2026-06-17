@@ -1,6 +1,5 @@
 package de.stuebingerb.kgraphql.schema
 
-import com.fasterxml.jackson.core.JsonProcessingException
 import de.stuebingerb.kgraphql.Context
 import de.stuebingerb.kgraphql.RequestError
 import de.stuebingerb.kgraphql.ValidationException
@@ -17,6 +16,7 @@ import de.stuebingerb.kgraphql.schema.model.ast.NameNode
 import de.stuebingerb.kgraphql.schema.structure.RequestInterpreter
 import de.stuebingerb.kgraphql.schema.structure.SchemaModel
 import kotlinx.coroutines.coroutineScope
+import kotlinx.serialization.SerializationException
 
 class DefaultSchema(
     override val configuration: SchemaConfiguration,
@@ -49,10 +49,10 @@ class DefaultSchema(
 
             val parsedVariables = try {
                 variables
-                    ?.let { VariablesJson.Defined(configuration.objectMapper.readTree(variables)) }
+                    ?.let { VariablesJson.Defined(configuration.json.parseToJsonElement(variables)) }
                     ?: VariablesJson.Empty()
-            } catch (e: JsonProcessingException) {
-                throw ValidationException("Malformed JSON in variables: ${e.originalMessage}", originalError = e)
+            } catch (e: SerializationException) {
+                throw ValidationException("Malformed JSON in variables: ${e.message}", originalError = e)
             }
 
             val document = requestParser.parseDocument(request)
@@ -63,7 +63,7 @@ class DefaultSchema(
                 context = context
             )
         } catch (e: RequestError) {
-            e.serialize()
+            configuration.json.encodeToString(e)
         }
     }
 

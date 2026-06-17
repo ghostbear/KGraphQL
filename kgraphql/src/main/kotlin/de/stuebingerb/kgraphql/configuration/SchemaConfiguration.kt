@@ -1,17 +1,16 @@
 package de.stuebingerb.kgraphql.configuration
 
-import com.fasterxml.jackson.databind.ObjectMapper
 import de.stuebingerb.kgraphql.schema.execution.ArgumentTransformer
 import de.stuebingerb.kgraphql.schema.execution.ErrorHandler
 import de.stuebingerb.kgraphql.schema.execution.GenericTypeResolver
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.serialization.json.Json
 
 open class SchemaConfiguration(
     // document parser caching mechanisms
     val useCachingDocumentParser: Boolean,
     val documentParserCacheMaximumSize: Long,
-    // jackson features
-    val objectMapper: ObjectMapper,
+    val json: Json,
     val useDefaultPrettyPrinter: Boolean,
     // execution
     val coroutineDispatcher: CoroutineDispatcher,

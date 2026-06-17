@@ -1,6 +1,5 @@
 package de.stuebingerb.kgraphql.schema.scalar
 
-import com.fasterxml.jackson.databind.node.JsonNodeFactory
 import de.stuebingerb.kgraphql.GraphQLError
 import de.stuebingerb.kgraphql.InvalidInputValueException
 import de.stuebingerb.kgraphql.dropQuotes
@@ -14,8 +13,7 @@ import de.stuebingerb.kgraphql.schema.builtin.STRING_COERCION
 import de.stuebingerb.kgraphql.schema.execution.Execution
 import de.stuebingerb.kgraphql.schema.model.ast.ValueNode
 import de.stuebingerb.kgraphql.schema.structure.Type
-
-private typealias JsonValueNode = com.fasterxml.jackson.databind.node.ValueNode
+import kotlinx.serialization.json.JsonPrimitive
 
 @Suppress("UNCHECKED_CAST")
 // TODO: Re-structure scalars, as it's a bit too complicated now.
@@ -47,29 +45,29 @@ internal fun <T : Any> deserializeScalar(scalar: Type.Scalar<T>, value: ValueNod
     }
 
 @Suppress("UNCHECKED_CAST")
-internal fun <T> serializeScalar(jsonNodeFactory: JsonNodeFactory, scalar: Type.Scalar<*>, value: T): JsonValueNode =
+internal fun <T> serializeScalar(scalar: Type.Scalar<*>, value: T): JsonPrimitive =
     when (scalar.coercion) {
         is StringScalarCoercion<*> -> {
-            jsonNodeFactory.textNode((scalar.coercion as StringScalarCoercion<T>).serialize(value))
+            JsonPrimitive((scalar.coercion as StringScalarCoercion<T>).serialize(value))
         }
 
         is ShortScalarCoercion<*> -> {
-            jsonNodeFactory.numberNode((scalar.coercion as ShortScalarCoercion<T>).serialize(value))
+            JsonPrimitive((scalar.coercion as ShortScalarCoercion<T>).serialize(value))
         }
 
         is IntScalarCoercion<*> -> {
-            jsonNodeFactory.numberNode((scalar.coercion as IntScalarCoercion<T>).serialize(value))
+            JsonPrimitive((scalar.coercion as IntScalarCoercion<T>).serialize(value))
         }
 
         is DoubleScalarCoercion<*> -> {
-            jsonNodeFactory.numberNode((scalar.coercion as DoubleScalarCoercion<T>).serialize(value))
+            JsonPrimitive((scalar.coercion as DoubleScalarCoercion<T>).serialize(value))
         }
 
         is LongScalarCoercion<*> -> {
-            jsonNodeFactory.numberNode((scalar.coercion as LongScalarCoercion<T>).serialize(value))
+            JsonPrimitive((scalar.coercion as LongScalarCoercion<T>).serialize(value))
         }
 
         is BooleanScalarCoercion<*> -> {
-            jsonNodeFactory.booleanNode((scalar.coercion as BooleanScalarCoercion<T>).serialize(value))
+            JsonPrimitive((scalar.coercion as BooleanScalarCoercion<T>).serialize(value))
         }
     }

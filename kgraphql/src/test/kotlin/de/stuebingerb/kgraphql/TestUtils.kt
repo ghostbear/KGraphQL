@@ -1,21 +1,23 @@
 package de.stuebingerb.kgraphql
 
-import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import de.stuebingerb.kgraphql.schema.DefaultSchema
 import de.stuebingerb.kgraphql.schema.Schema
 import de.stuebingerb.kgraphql.schema.dsl.SchemaBuilder
 import de.stuebingerb.kgraphql.schema.structure.Type
 import io.kotest.inspectors.forAll
 import io.kotest.matchers.shouldBe
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
 import java.io.File
 import java.io.FileNotFoundException
 import kotlin.reflect.KClass
 
-val objectMapper = jacksonObjectMapper()
+val objectMapper = Json
 
 @JvmName("deserializeString")
 fun deserialize(json: String): Map<*, *> {
-    return objectMapper.readValue(json, HashMap::class.java)
+
+    return objectMapper.parseToJsonElement(json).jsonObject
 }
 
 fun String.deserialize(): Map<*, *> = deserialize(this)

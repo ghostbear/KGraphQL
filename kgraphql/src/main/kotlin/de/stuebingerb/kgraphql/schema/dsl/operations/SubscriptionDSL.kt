@@ -1,12 +1,12 @@
 package de.stuebingerb.kgraphql.schema.dsl.operations
 
-import com.fasterxml.jackson.databind.ObjectWriter
 import de.stuebingerb.kgraphql.schema.Publisher
 import de.stuebingerb.kgraphql.schema.SchemaException
 import de.stuebingerb.kgraphql.schema.Subscriber
 import de.stuebingerb.kgraphql.schema.Subscription
 import de.stuebingerb.kgraphql.schema.model.FunctionWrapper
 import de.stuebingerb.kgraphql.schema.model.SubscriptionDef
+import kotlinx.serialization.json.Json
 import kotlin.reflect.full.isSubtypeOf
 import kotlin.reflect.full.memberProperties
 import kotlin.reflect.full.starProjectedType
@@ -50,12 +50,12 @@ fun <T : Any> subscribe(
         throw SchemaException("Subscription return type must be the same as the publisher's")
     }
     val subscriber = object : Subscriber {
-        override fun setObjectWriter(objectWriter: ObjectWriter) {
-            this.objectWriter = objectWriter
+        override fun setJson(json: Json) {
+            this.json = json
         }
 
         private var args = emptyArray<String>()
-        private lateinit var objectWriter: ObjectWriter
+        private lateinit var json: Json
         override fun setArgs(args: Array<String>) {
             this.args = args
         }
@@ -67,7 +67,7 @@ fun <T : Any> subscribe(
             args.forEach {
                 result[it] = getFieldValue(item!!, it)
             }
-            function(objectWriter.writeValueAsString(response))
+            function(json.encodeToString(response))
         }
 
         override fun onComplete() {

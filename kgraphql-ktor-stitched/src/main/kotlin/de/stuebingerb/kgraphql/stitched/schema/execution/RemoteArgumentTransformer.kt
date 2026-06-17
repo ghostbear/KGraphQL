@@ -1,7 +1,5 @@
 package de.stuebingerb.kgraphql.stitched.schema.execution
 
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.databind.node.ObjectNode
 import de.stuebingerb.kgraphql.Context
 import de.stuebingerb.kgraphql.helpers.toValueNode
 import de.stuebingerb.kgraphql.request.Variables
@@ -17,8 +15,11 @@ import de.stuebingerb.kgraphql.schema.model.ast.NameNode
 import de.stuebingerb.kgraphql.schema.model.ast.ValueNode
 import de.stuebingerb.kgraphql.schema.structure.Field
 import de.stuebingerb.kgraphql.schema.structure.InputValue
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.encodeToJsonElement
 
-class RemoteArgumentTransformer(val objectMapper: ObjectMapper, genericTypeResolver: GenericTypeResolver) :
+class RemoteArgumentTransformer(val objectMapper: Json, genericTypeResolver: GenericTypeResolver) :
     ArgumentTransformer(genericTypeResolver) {
     override fun transformArguments(
         funName: String,
@@ -38,8 +39,8 @@ class RemoteArgumentTransformer(val objectMapper: ObjectMapper, genericTypeResol
             it.key to it.value
         } + argsFromParent.map {
             val parentValue = when (receiver) {
-                is ObjectNode -> receiver.get(it.value)
-                else -> (objectMapper.valueToTree(receiver) as? ObjectNode)?.get(it.value)
+                is JsonObject -> receiver[it.value]
+                else -> (objectMapper.encodeToJsonElement(receiver) as? JsonObject)?.get(it.value)
             }.toValueNode(it.key.type)
             if (parentValue is ValueNode.NullValueNode && it.key.type.kind == TypeKind.NON_NULL) {
                 // parentValue is null but required for the remote operation; return null to skip call

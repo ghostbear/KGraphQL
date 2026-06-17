@@ -1,6 +1,5 @@
 package de.stuebingerb.kgraphql.specification.typesystem
 
-import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import de.stuebingerb.kgraphql.InvalidInputValueException
 import de.stuebingerb.kgraphql.KGraphQL
 import de.stuebingerb.kgraphql.deserialize
@@ -9,6 +8,7 @@ import de.stuebingerb.kgraphql.expectExecutionError
 import de.stuebingerb.kgraphql.extract
 import de.stuebingerb.kgraphql.schema.SchemaException
 import io.kotest.matchers.shouldBe
+import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.Test
 
 @Suppress("unused")
@@ -22,7 +22,7 @@ class InputObjectsSpecificationTest {
 
     data class Circular(val ref: Circular? = null, val value: String? = null)
 
-    private val objectMapper = jacksonObjectMapper()
+    private val objectMapper = Json
 
     val schema = KGraphQL.schema {
         inputType<InputTwo>()
@@ -34,7 +34,7 @@ class InputObjectsSpecificationTest {
         val two = object {
             val two = InputTwo(InputOne(MockEnum.M1, "M1"), 3434, listOf("23", "34", "21", "434"))
         }
-        val variables = objectMapper.writeValueAsString(two)
+        val variables = objectMapper.encodeToString(two)
         val response = deserialize(schema.executeBlocking("query(\$two: InputTwo!){test(input: \$two)}", variables))
         response.extract<String>("data/test") shouldBe "success: InputTwo(one=InputOne(enum=M1, id=M1), quantity=3434, tokens=[23, 34, 21, 434])"
     }
@@ -57,7 +57,7 @@ class InputObjectsSpecificationTest {
                 "query(\$cirNull: Circular!, \$cirSuccess: Circular!){" +
                     "null: circular(cir: \$cirNull)" +
                     "success: circular(cir: \$cirSuccess)}",
-                objectMapper.writeValueAsString(variables)
+                objectMapper.encodeToString(variables)
             )
         )
         response.extract<String>("data/success") shouldBe "SUCCESS"

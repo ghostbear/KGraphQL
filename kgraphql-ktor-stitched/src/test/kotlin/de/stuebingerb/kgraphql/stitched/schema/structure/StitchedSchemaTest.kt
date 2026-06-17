@@ -1,6 +1,5 @@
 package de.stuebingerb.kgraphql.stitched.schema.structure
 
-import com.fasterxml.jackson.databind.JsonNode
 import de.stuebingerb.kgraphql.Context
 import de.stuebingerb.kgraphql.ExperimentalAPI
 import de.stuebingerb.kgraphql.expect
@@ -16,6 +15,7 @@ import de.stuebingerb.kgraphql.stitched.getRemoteSchema
 import de.stuebingerb.kgraphql.stitched.schema.configuration.StitchedSchemaConfiguration
 import de.stuebingerb.kgraphql.stitched.schema.execution.RemoteRequestExecutor
 import io.kotest.matchers.shouldBe
+import kotlinx.serialization.json.JsonElement
 import org.junit.jupiter.api.Test
 import java.time.LocalDate
 import java.util.Locale
@@ -50,7 +50,7 @@ class StitchedSchemaTest {
     @Test
     fun `stitched schema should allow to configure remote executor`() {
         val customRemoteRequestExecutor = object : RemoteRequestExecutor {
-            override suspend fun execute(node: Execution.Remote, ctx: Context): JsonNode? {
+            override suspend fun execute(node: Execution.Remote, ctx: Context): JsonElement? {
                 return null
             }
         }

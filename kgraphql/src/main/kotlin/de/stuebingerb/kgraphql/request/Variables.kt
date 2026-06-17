@@ -1,11 +1,11 @@
 package de.stuebingerb.kgraphql.request
 
-import com.fasterxml.jackson.databind.JsonNode
 import de.stuebingerb.kgraphql.ValidationException
 import de.stuebingerb.kgraphql.schema.model.ast.TypeNode
 import de.stuebingerb.kgraphql.schema.model.ast.ValueNode
 import de.stuebingerb.kgraphql.schema.model.ast.VariableDefinitionNode
 import de.stuebingerb.kgraphql.schema.structure.Type
+import kotlinx.serialization.json.JsonElement
 
 data class Variables(private val variablesJson: VariablesJson, private val variables: List<VariableDefinitionNode>?) {
     internal fun get(type: Type, keyNode: ValueNode.VariableNode, defaultValue: Any? = null): ValueNode? {
@@ -22,7 +22,7 @@ data class Variables(private val variablesJson: VariablesJson, private val varia
         return variablesJson.get(type, keyNode.name) ?: variable.defaultValue
     }
 
-    fun getRaw(): JsonNode? = variablesJson.getRaw()
+    fun getRaw(): JsonElement? = variablesJson.getRaw()
 
     private fun validateVariable(expectedType: Type, variable: VariableDefinitionNode, defaultValue: Any?) {
         val variableType = variable.type

@@ -1,14 +1,9 @@
 package de.stuebingerb.kgraphql.schema.execution
 
-import com.fasterxml.jackson.databind.JsonNode
-import com.fasterxml.jackson.databind.node.ArrayNode
-import com.fasterxml.jackson.databind.node.NullNode
-import com.fasterxml.jackson.databind.node.ObjectNode
 import de.stuebingerb.kgraphql.Context
 import de.stuebingerb.kgraphql.ExecutionError
 import de.stuebingerb.kgraphql.ExecutionException
 import de.stuebingerb.kgraphql.RequestError
-import de.stuebingerb.kgraphql.helpers.toJsonNode
 import de.stuebingerb.kgraphql.mapIndexedParallel
 import de.stuebingerb.kgraphql.request.Variables
 import de.stuebingerb.kgraphql.request.VariablesJson
@@ -25,6 +20,16 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.job
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.encodeToJsonElement
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.putJsonArray
 import nidomiro.kdataloader.DataLoader
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.reflect.KProperty1
@@ -65,18 +70,11 @@ internal class ParallelRequestExecutor(val schema: DefaultSchema) : RequestExecu
 
     private val dispatcher = schema.configuration.coroutineDispatcher
 
-    private val jsonNodeFactory = schema.configuration.objectMapper.nodeFactory
+    private val jsonNodeFactory = schema.configuration.json
 
-    private val objectWriter = schema.configuration.objectMapper.writer().let {
-        if (schema.configuration.useDefaultPrettyPrinter) {
-            it.withDefaultPrettyPrinter()
-        } else {
-            it
-        }
-    }
+    private val objectWriter = schema.configuration.json
 
     override suspend fun suspendExecute(plan: ExecutionPlan, variables: VariablesJson, context: Context): String {
-        val root = jsonNodeFactory.objectNode()
         val ctx = ExecutionContext(
             Variables(variables, plan.declaredVariables),
             context,
@@ -88,15 +86,17 @@ internal class ParallelRequestExecutor(val schema: DefaultSchema) : RequestExecu
         // https://spec.graphql.org/September2025/#note-19ca4
         // "When "errors" is present in an execution result, it may be helpful for it to appear first when serialized to make it more apparent that errors are present."
         // So let's put errors first
-        if (context.errors.isNotEmpty()) {
-            root.set<ArrayNode>("errors", context.errors.toJsonNode(schema.configuration.objectMapper))
+        val root = buildJsonObject {
+            if (context.errors.isNotEmpty()) {
+                put("errors", schema.configuration.json.encodeToJsonElement(context.errors))
+            }
+            put("data", data)
         }
-        root.set<ObjectNode>("data", data)
 
-        return objectWriter.writeValueAsString(root)
+        return objectWriter.encodeToString(root)
     }
 
-    private suspend fun executePlan(ctx: ExecutionContext, plan: ExecutionPlan): JsonNode = try {
+    private suspend fun executePlan(ctx: ExecutionContext, plan: ExecutionPlan): JsonElement = try {
         suspend fun executeOperation(operation: Execution) =
             when (operation) {
                 is Execution.Fragment -> handleFragment(ctx, plan.root, operation)
@@ -104,7 +104,7 @@ internal class ParallelRequestExecutor(val schema: DefaultSchema) : RequestExecu
                     ?: emptyMap()
             }
 
-        val objectNode = jsonNodeFactory.objectNode()
+        val objectNode = JsonObject(emptyMap())
         val deferreds = if (plan.executionMode == ExecutionMode.Normal) {
             plan.mapIndexedParallel(dispatcher) { _, child ->
                 executeOperation(child)
@@ -123,7 +123,7 @@ internal class ParallelRequestExecutor(val schema: DefaultSchema) : RequestExecu
         objectNode
     } catch (e: ExecutionError) {
         ctx.requestContext.raiseError(e)
-        jsonNodeFactory.nullNode()
+        JsonNull
     }
 
     private suspend fun <T> createUnionOperationNode(
@@ -131,7 +131,7 @@ internal class ParallelRequestExecutor(val schema: DefaultSchema) : RequestExecu
         parent: T,
         node: Execution.Union,
         unionProperty: Field.Union<T>
-    ): Deferred<JsonNode> {
+    ): Deferred<JsonElement> {
         try {
             node.field.checkAccess(parent, ctx.requestContext)
         } catch (e: Throwable) {
@@ -165,9 +165,9 @@ internal class ParallelRequestExecutor(val schema: DefaultSchema) : RequestExecu
         value: T?,
         node: Execution.Node,
         returnType: Type
-    ): Deferred<JsonNode> {
+    ): Deferred<JsonElement> {
         try {
-            if (value == null || value is NullNode) {
+            if (value == null || value is JsonNull) {
                 return CompletableDeferred(createNullNode(node, returnType))
             }
 
@@ -178,10 +178,10 @@ internal class ParallelRequestExecutor(val schema: DefaultSchema) : RequestExecu
 
             return when {
                 // Check value, not returnType, because this method can be invoked with element value
-                value is Collection<*> || value is Array<*> || value is ArrayNode || value::class in typeByPrimitiveArrayClass.keys -> {
+                value is Collection<*> || value is Array<*> || value is JsonArray || value::class in typeByPrimitiveArrayClass.keys -> {
                     val values: Collection<*> = when (value) {
                         is Array<*> -> value.toList()
-                        is ArrayNode -> value.toList()
+                        is JsonArray -> value.toList()
                         is IntArray -> value.toList()
                         is ShortArray -> value.toList()
                         is LongArray -> value.toList()
@@ -196,9 +196,13 @@ internal class ParallelRequestExecutor(val schema: DefaultSchema) : RequestExecu
                         val valueNodes = values.mapIndexedParallel(dispatcher) { i, value ->
                             createNode(ctx, value, node.withIndex(i), unwrappedReturnType)
                         }
-                        CompletableDeferred(valueNodes.fold(jsonNodeFactory.arrayNode(values.size)) { array, v ->
-                            array.add(v.await())
-                        })
+
+
+                        CompletableDeferred(
+                            buildJsonArray {
+                                valueNodes.forEach { v -> add(v.await()) }
+                            }
+                        )
                     } else {
                         handleException(
                             ctx,
@@ -212,13 +216,13 @@ internal class ParallelRequestExecutor(val schema: DefaultSchema) : RequestExecu
                     }
                 }
 
-                value is String -> CompletableDeferred(jsonNodeFactory.textNode(value))
-                value is Int -> CompletableDeferred(jsonNodeFactory.numberNode(value))
-                value is Float -> CompletableDeferred(jsonNodeFactory.numberNode(value))
-                value is Double -> CompletableDeferred(jsonNodeFactory.numberNode(value))
-                value is Boolean -> CompletableDeferred(jsonNodeFactory.booleanNode(value))
-                value is Long -> CompletableDeferred(jsonNodeFactory.numberNode(value))
-                value is Short -> CompletableDeferred(jsonNodeFactory.numberNode(value))
+                value is String -> CompletableDeferred(JsonPrimitive(value))
+                value is Int -> CompletableDeferred(JsonPrimitive(value))
+                value is Float -> CompletableDeferred(JsonPrimitive(value))
+                value is Double -> CompletableDeferred(JsonPrimitive(value))
+                value is Boolean -> CompletableDeferred(JsonPrimitive(value))
+                value is Long -> CompletableDeferred(JsonPrimitive(value))
+                value is Short -> CompletableDeferred(JsonPrimitive(value))
 
                 value is Deferred<*> -> createNode(ctx, value.await(), node, returnType)
 
@@ -232,7 +236,7 @@ internal class ParallelRequestExecutor(val schema: DefaultSchema) : RequestExecu
                 )
 
                 // TODO: do we have to consider more? more validation e.g.?
-                value is JsonNode -> CompletableDeferred(value)
+                value is JsonElement -> CompletableDeferred(value)
 
                 else -> CompletableDeferred(createSimpleValueNode(returnType, value, node))
             }
@@ -241,22 +245,22 @@ internal class ParallelRequestExecutor(val schema: DefaultSchema) : RequestExecu
         }
     }
 
-    private fun <T> createSimpleValueNode(returnType: Type, value: T, node: Execution.Node): JsonNode =
+    private fun <T> createSimpleValueNode(returnType: Type, value: T, node: Execution.Node): JsonElement =
         when (val unwrapped = returnType.unwrapped()) {
             is Type.Scalar<*> -> {
-                serializeScalar(jsonNodeFactory, unwrapped, value)
+                serializeScalar(unwrapped, value)
             }
 
             is Type.Enum<*> -> {
-                jsonNodeFactory.textNode(value.toString())
+                JsonPrimitive(value.toString())
             }
 
             else -> throw ExecutionException("Invalid type '${unwrapped.name}'", node)
         }
 
-    private fun createNullNode(node: Execution.Node, returnType: Type): NullNode {
+    private fun createNullNode(node: Execution.Node, returnType: Type): JsonNull {
         if (returnType.kind != TypeKind.NON_NULL) {
-            return jsonNodeFactory.nullNode()
+            return JsonNull
         } else {
             throw ExecutionError("Null result for non-nullable operation '${node.aliasOrKey}'", node)
         }
@@ -267,8 +271,8 @@ internal class ParallelRequestExecutor(val schema: DefaultSchema) : RequestExecu
         value: T,
         node: Execution.Node,
         type: Type
-    ): Deferred<ObjectNode> {
-        val objectNode = jsonNodeFactory.objectNode()
+    ): Deferred<JsonObject> {
+        val objectNode = JsonObject(mutableMapOf())
         val deferreds = node.children.mapIndexedParallel(dispatcher) { _, child ->
             when (child) {
                 is Execution.Fragment -> handleFragment(ctx, value, child.withParent(node))
@@ -289,7 +293,7 @@ internal class ParallelRequestExecutor(val schema: DefaultSchema) : RequestExecu
         value: T,
         child: Execution,
         type: Type
-    ): Pair<String, Deferred<JsonNode>>? {
+    ): Pair<String, Deferred<JsonElement>>? {
         when (child) {
             // Union is subclass of Node so check it first
             is Execution.Union -> {
@@ -330,20 +334,20 @@ internal class ParallelRequestExecutor(val schema: DefaultSchema) : RequestExecu
         ctx: ExecutionContext,
         value: T,
         container: Execution.Fragment
-    ): Map<String, Deferred<JsonNode?>> {
+    ): Map<String, Deferred<JsonElement?>> {
         val include = shouldInclude(ctx, container)
         if (include) {
             val expectedType = container.condition.onType
             if (expectedType.kind == TypeKind.OBJECT || expectedType.kind == TypeKind.INTERFACE) {
                 // TODO: for remote objects we now rely on the presence of the __typename. So maybe we should/need to automatically add it if not present already? Can this break something?
-                if (expectedType == value || expectedType.isInstance(value) || (value is JsonNode && value["__typename"]?.textValue() == expectedType.name)) {
+                if (expectedType == value || expectedType.isInstance(value) || (value is JsonObject && value.getValue("__typename").jsonPrimitive.content == expectedType.name)) {
                     val childElements = container.elements.flatMap { child ->
                         when (child) {
                             is Execution.Fragment -> handleFragment(ctx, value, child.withParent(container)).toList()
                             else -> listOfNotNull(handleProperty(ctx, value, child.withParent(container), expectedType))
                         }
                     }
-                    val mapped: Map<String, Deferred<JsonNode?>> = childElements.fold(mutableMapOf()) { map, entry ->
+                    val mapped: Map<String, Deferred<JsonElement?>> = childElements.fold(mutableMapOf()) { map, entry ->
                         map.merge(entry.first, entry.second)
                     }
                     return mapped
@@ -367,7 +371,7 @@ internal class ParallelRequestExecutor(val schema: DefaultSchema) : RequestExecu
         parentValue: T,
         node: Execution.Node,
         field: Field
-    ): Deferred<JsonNode>? {
+    ): Deferred<JsonElement>? {
         val include = shouldInclude(ctx, node)
         if (include) {
             try {
@@ -377,13 +381,13 @@ internal class ParallelRequestExecutor(val schema: DefaultSchema) : RequestExecu
                 return handleException(ctx, node, node.field.returnType, e)
             }
             when {
-                parentValue is JsonNode -> {
+                parentValue is JsonObject -> {
                     // This covers a) Field.Delegated but also b) *local* types that are returned from
                     //   remote queries, which can happen if we stitch to a local query (and where field
                     //   is Field.Kotlin<*, *> but parentValue is an ObjectNode)
                     // TODO: We might want to have separated types and then *only* deal with delegated fields here
                     // TODO: Can this break with functions or local types that are *actually* JsonNodes?
-                    return createNode(ctx, (parentValue as JsonNode).get(node.aliasOrKey), node, field.returnType)
+                    return createNode(ctx, (parentValue as JsonObject)[node.aliasOrKey], node, field.returnType)
                 }
 
                 field is Field.Kotlin<*, *> -> {
@@ -419,7 +423,7 @@ internal class ParallelRequestExecutor(val schema: DefaultSchema) : RequestExecu
         parentValue: T,
         node: Execution.Node,
         field: Field.DataLoader<*, *, *>
-    ): Deferred<JsonNode> {
+    ): Deferred<JsonElement> {
         val preparedValue = field.kql.prepare.invoke(
             funName = field.name,
             receiver = parentValue,
@@ -441,7 +445,7 @@ internal class ParallelRequestExecutor(val schema: DefaultSchema) : RequestExecu
         node: Execution.Node,
         returnType: Type,
         exception: Throwable
-    ): CompletableDeferred<NullNode> {
+    ): CompletableDeferred<JsonNull> {
         if (!schema.configuration.wrapErrors || exception is CancellationException) {
             throw exception
         }
@@ -466,7 +470,7 @@ internal class ParallelRequestExecutor(val schema: DefaultSchema) : RequestExecu
         parentValue: T,
         node: Execution.Node,
         field: Field.Function<*, *>
-    ): Deferred<JsonNode> {
+    ): Deferred<JsonElement> {
         try {
             val result = field.invoke(
                 funName = field.name,

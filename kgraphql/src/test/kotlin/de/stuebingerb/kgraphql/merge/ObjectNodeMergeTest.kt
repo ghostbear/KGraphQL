@@ -1,75 +1,70 @@
 package de.stuebingerb.kgraphql.merge
 
-import com.fasterxml.jackson.databind.JsonNode
-import com.fasterxml.jackson.databind.node.JsonNodeFactory
 import de.stuebingerb.kgraphql.expect
 import de.stuebingerb.kgraphql.schema.execution.merge
 import io.kotest.matchers.shouldBe
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import org.junit.jupiter.api.Test
 
 class ObjectNodeMergeTest {
-    private val jsonNodeFactory = JsonNodeFactory.instance
 
     @Test
     fun `merge should add property`() {
-        val existing = jsonNodeFactory.objectNode().put("param1", "value1")
-        val update = jsonNodeFactory.objectNode().put("param2", "value2")
+        val existing = JsonObject(mapOf("param1" to JsonPrimitive("value1")))
+        val update = JsonObject(mapOf("param2" to JsonPrimitive("value2")))
 
         existing.merge(update)
 
-        val expected: JsonNode? = jsonNodeFactory.textNode("value2")
-        existing.get("param2") shouldBe expected
+        val expected = JsonPrimitive("value2")
+        existing["param2"] shouldBe expected
     }
 
     @Test
     fun `merge should add nested property`() {
-        val existing = jsonNodeFactory.objectNode().put("param1", "value1")
-        val update = jsonNodeFactory.objectNode()
-        update.putObject("sub").put("param2", "value2")
-
+        val existing = JsonObject(mapOf("param1" to JsonPrimitive("value1")))
+        val update = JsonObject(mapOf("sub" to JsonObject(mapOf("param2" to JsonPrimitive("value2")))))
         existing.merge(update)
 
-        val expected: JsonNode? = jsonNodeFactory.objectNode().put("param2", "value2")
-        existing.get("sub") shouldBe expected
+        val expected = JsonObject(mapOf("param2" to JsonPrimitive("value2")))
+        existing["sub"] shouldBe expected
     }
 
     @Test
     fun `merge should not change simple node`() {
-        val existing = jsonNodeFactory.objectNode().put("param", "value1")
-        val update = jsonNodeFactory.objectNode().put("param", "value2")
+        val existing = JsonObject(mapOf("param" to JsonPrimitive("value1")))
+        val update = JsonObject(mapOf("param" to JsonPrimitive("value2")))
 
         expect<IllegalStateException>("trying to merge different simple nodes for param") {
             existing.merge(update)
         }
 
-        val expected: JsonNode? = jsonNodeFactory.textNode("value1")
-        existing.get("param") shouldBe expected
+        val expected = JsonPrimitive("value1")
+        existing["param"] shouldBe expected
     }
 
     @Test
     fun `merge should not merge simple node with object node`() {
-        val existing = jsonNodeFactory.objectNode().put("param", "value1")
-        val update = jsonNodeFactory.objectNode()
-        update.putObject("param")
+        val existing = JsonObject(mapOf("param" to JsonPrimitive("value1")))
+        val update = JsonObject(mapOf("param" to JsonObject(emptyMap())))
 
         expect<IllegalStateException>("trying to merge object with simple node for param") {
             existing.merge(update)
         }
 
-        val expected: JsonNode? = jsonNodeFactory.textNode("value1")
-        existing.get("param") shouldBe expected
+        val expected = JsonPrimitive("value1")
+        existing["param"] shouldBe expected
     }
 
     @Test
     fun `merge should not merge object node with simple node`() {
-        val existing = jsonNodeFactory.objectNode()
-        val existingObj: JsonNode? = existing.putObject("param").put("other", "value1")
-        val update = jsonNodeFactory.objectNode().put("param", "value2")
+        val existing = JsonObject(mapOf("param" to JsonObject(mapOf("other" to JsonPrimitive("value1")))))
+        val update = JsonObject(mapOf("param" to JsonPrimitive("value2")))
 
         expect<IllegalStateException>("trying to merge simple node with object node for param") {
             existing.merge(update)
         }
 
-        existing.get("param") shouldBe existingObj
+        existing["param"] shouldBe existing
     }
 }

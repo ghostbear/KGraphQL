@@ -1,10 +1,5 @@
 package de.stuebingerb.kgraphql.stitched.schema.execution
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties
-import com.fasterxml.jackson.databind.JsonNode
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.databind.node.ObjectNode
-import com.fasterxml.jackson.module.kotlin.readValue
 import de.stuebingerb.kgraphql.BuiltInErrorCodes
 import de.stuebingerb.kgraphql.Context
 import de.stuebingerb.kgraphql.ExecutionError
@@ -18,6 +13,13 @@ import de.stuebingerb.kgraphql.schema.model.ast.ValueNode
 import de.stuebingerb.kgraphql.schema.structure.Field
 import de.stuebingerb.kgraphql.schema.structure.Type
 import de.stuebingerb.kgraphql.stitched.StitchedGraphqlRequest
+import kotlinx.serialization.Contextual
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonIgnoreUnknownKeys
+import kotlinx.serialization.json.jsonObject
 
 /**
  * Custom remote execution error to be able to provide a [path] via constructor.
@@ -29,19 +31,21 @@ private class RemoteExecutionError(
     override val path: List<Any>
 ) : ExecutionError(message, node, extensions = extensions)
 
-@JsonIgnoreProperties(ignoreUnknown = true)
+@Serializable
+@JsonIgnoreUnknownKeys
 private class ResponseError(
     val message: String,
-    val path: List<Any>?,
+    val path: List<@Contextual Any>?,
     // response location is not mapped because we want the local location anyway
-    val extensions: Map<String, Any?>?
+    val extensions: Map<String, @Contextual Any?>?
 )
 
-@JsonIgnoreProperties(ignoreUnknown = true)
-private class StitchedGraphQLResponse(val data: ObjectNode?, val errors: List<ResponseError>?)
+@Serializable
+@JsonIgnoreUnknownKeys
+private class StitchedGraphQLResponse(val data: JsonElement?, val errors: List<ResponseError>?)
 
 @ExperimentalAPI
-abstract class AbstractRemoteRequestExecutor(private val objectMapper: ObjectMapper) : RemoteRequestExecutor {
+abstract class AbstractRemoteRequestExecutor(private val objectMapper: Json) : RemoteRequestExecutor {
 
     /**
      * Executes the actual [request] against the given [url] in the current [ctx]. This function is intended to
@@ -52,10 +56,10 @@ abstract class AbstractRemoteRequestExecutor(private val objectMapper: ObjectMap
     /**
      * Main entry point called from the local request executor for the given [node] and [ctx].
      */
-    final override suspend fun execute(node: Execution.Remote, ctx: Context): JsonNode? = try {
+    final override suspend fun execute(node: Execution.Remote, ctx: Context): JsonElement? = try {
         val remoteUrl = node.remoteUrl
         val request = toGraphQLRequest(node, ctx)
-        val response = objectMapper.readValue<StitchedGraphQLResponse>(executeRequest(remoteUrl, request, ctx))
+        val response = objectMapper.decodeFromString<StitchedGraphQLResponse>(executeRequest(remoteUrl, request, ctx))
         response.errors?.forEach { error ->
             ctx.raiseError(
                 RemoteExecutionError(
@@ -68,7 +72,7 @@ abstract class AbstractRemoteRequestExecutor(private val objectMapper: ObjectMap
                 )
             )
         }
-        response.data?.get(node.remoteOperation)
+        response.data?.jsonObject?.get(node.remoteOperation)
     } catch (e: Exception) {
         ctx.raiseError(ExecutionError(e.message ?: e.javaClass.simpleName, node, e, node.errorExtensions()))
         null

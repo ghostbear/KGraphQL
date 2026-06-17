@@ -1,6 +1,6 @@
 package de.stuebingerb.kgraphql.schema
 
-import com.fasterxml.jackson.databind.ObjectWriter
+import kotlinx.serialization.json.Json
 
 interface Subscriber {
     fun onSubscribe(subscription: Subscription)
@@ -13,5 +13,5 @@ interface Subscriber {
 
     fun onComplete()
 
-    fun setObjectWriter(objectWriter: ObjectWriter)
+    fun setJson(json: Json)
 }

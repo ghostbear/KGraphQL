@@ -124,7 +124,11 @@ class StitchedGraphQL(val schema: Schema) {
                         proceed()
                     }
                 } catch (e: GraphQLError) {
-                    context.respondText(e.serialize(), ContentType.Application.Json, HttpStatusCode.OK)
+                    context.respondText(
+                        schema.configuration.json.encodeToString(e),
+                        ContentType.Application.Json,
+                        HttpStatusCode.OK
+                    )
                 }
             }
             return GraphQL(schema)

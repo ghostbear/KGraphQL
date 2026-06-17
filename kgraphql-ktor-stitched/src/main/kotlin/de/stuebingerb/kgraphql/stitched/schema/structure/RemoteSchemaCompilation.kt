@@ -1,6 +1,5 @@
 package de.stuebingerb.kgraphql.stitched.schema.structure
 
-import com.fasterxml.jackson.databind.JsonNode
 import de.stuebingerb.kgraphql.Context
 import de.stuebingerb.kgraphql.ExperimentalAPI
 import de.stuebingerb.kgraphql.schema.builtin.BuiltInScalars
@@ -20,6 +19,10 @@ import de.stuebingerb.kgraphql.schema.structure.InputValue
 import de.stuebingerb.kgraphql.schema.structure.Type
 import de.stuebingerb.kgraphql.schema.structure.TypeProxy
 import de.stuebingerb.kgraphql.stitched.schema.configuration.StitchedSchemaConfiguration
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 
 @ExperimentalAPI
 class RemoteSchemaCompilation(private val configuration: StitchedSchemaConfiguration) {
@@ -115,8 +118,8 @@ class RemoteSchemaCompilation(private val configuration: StitchedSchemaConfigura
         field: __Field,
         url: String,
         queryName: String = field.name
-    ): Field.RemoteOperation<Nothing, JsonNode?> {
-        val kql = PropertyDef.Function<Nothing, JsonNode?>(
+    ): Field.RemoteOperation<Nothing, JsonElement?> {
+        val kql = PropertyDef.Function<Nothing, JsonElement?>(
             name = field.name,
             resolver = FunctionWrapper.ArityTwo(
                 implementation = { node: Execution.Remote, ctx: Context ->
@@ -132,7 +135,7 @@ class RemoteSchemaCompilation(private val configuration: StitchedSchemaConfigura
                         ?.filter { it !is SelectionNode.FieldNode || it.name.value in availableFieldNames }
                         .orEmpty()
                     if (filteredSelections.isEmpty() && returnType.fields != null) {
-                        return@ArityTwo configuration.objectMapper.createObjectNode()
+                        return@ArityTwo JsonObject(emptyMap())
                     }
 
                     configuration.remoteExecutor.execute(node, ctx)
@@ -288,7 +291,7 @@ class RemoteSchemaCompilation(private val configuration: StitchedSchemaConfigura
     private fun typenameField() = Field.Function(
         kql = PropertyDef.Function<Nothing, String>(
             name = "__typename",
-            resolver = FunctionWrapper.on({ node: JsonNode -> node["__typename"].textValue() }, true)
+            resolver = FunctionWrapper.on({ node: JsonElement -> node.jsonObject.getValue("__typename").jsonPrimitive.content }, true)
         ),
         returnType = BuiltInScalars.STRING.typeDef.toScalarType(),
         arguments = emptyList()

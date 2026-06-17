@@ -1,9 +1,5 @@
 package de.stuebingerb.kgraphql.schema.dsl
 
-import com.fasterxml.jackson.core.JsonParser
-import com.fasterxml.jackson.databind.DeserializationContext
-import com.fasterxml.jackson.databind.deser.std.StdDeserializer
-import com.fasterxml.jackson.databind.module.SimpleModule
 import de.stuebingerb.kgraphql.schema.Publisher
 import de.stuebingerb.kgraphql.schema.Schema
 import de.stuebingerb.kgraphql.schema.SchemaException
@@ -293,13 +289,14 @@ inline fun <T : Any, reified Raw : Any> SchemaConfigurationDSL.appendMapper(
     scalar: ScalarDSL<T, Raw>,
     kClass: KClass<T>
 ) {
-    objectMapper.registerModule(SimpleModule().addDeserializer(kClass.java, object : UsesDeserializer<T>() {
-        override fun deserialize(p: JsonParser, ctxt: DeserializationContext?): T? {
-            return scalar.deserialize?.invoke(p.readValueAs(Raw::class.java))
-        }
-    }))
+    // todo
+    // objectMapper.registerModule(SimpleModule().addDeserializer(kClass.java, object : UsesDeserializer<T>() {
+    //     override fun deserialize(p: JsonParser, ctxt: DeserializationContext?): T? {
+    //         return scalar.deserialize?.invoke(p.readValueAs(Raw::class.java))
+    //     }
+    // }))
 }
 
-open class UsesDeserializer<T>(vc: Class<*>? = null) : StdDeserializer<T>(vc) {
-    override fun deserialize(p: JsonParser, ctxt: DeserializationContext?): T? = TODO("Implement")
-}
+// open class UsesDeserializer<T>(vc: Class<*>? = null) : StdDeserializer<T>(vc) {
+//     override fun deserialize(p: JsonParser, ctxt: DeserializationContext?): T? = TODO("Implement")
+// }

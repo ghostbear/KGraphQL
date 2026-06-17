@@ -1,7 +1,7 @@
 package de.stuebingerb.kgraphql.demo
 
-import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import de.stuebingerb.kgraphql.KGraphQL
+import kotlinx.serialization.json.Json
 
 enum class Episode {
     NEWHOPE, EMPIRE, JEDI
@@ -39,7 +39,7 @@ suspend fun main() {
     val schema = KGraphQL.schema {
         configure {
             useDefaultPrettyPrinter = true
-            objectMapper = jacksonObjectMapper()
+            json = Json
             useCachingDocumentParser = false
         }
 

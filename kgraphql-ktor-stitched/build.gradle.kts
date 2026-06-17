@@ -7,8 +7,6 @@ plugins {
 dependencies {
     api(project(":kgraphql"))
     api(project(":kgraphql-ktor"))
-    implementation(libs.jackson.core.databind)
-    implementation(libs.jackson.module.kotlin)
     implementation(libs.ktor.server.core)
     implementation(libs.ktor.client.core)
     implementation(libs.ktor.client.cio)
